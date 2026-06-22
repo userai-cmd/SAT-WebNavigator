@@ -96,8 +96,48 @@ function daysAgo(days) {
   return d.toISOString();
 }
 
-async function getSummary(days = 30) {
-  const since = daysAgo(days);
+function resolvePeriod({ days, from, to } = {}) {
+  if (from && to) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) {
+      const err = new Error("Invalid date format, use YYYY-MM-DD");
+      err.status = 400;
+      throw err;
+    }
+    if (from > to) {
+      const err = new Error("from must be before or equal to to");
+      err.status = 400;
+      throw err;
+    }
+    const fromIso = `${from}T00:00:00.000Z`;
+    const end = new Date(`${to}T00:00:00.000Z`);
+    end.setUTCDate(end.getUTCDate() + 1);
+    return { from: fromIso, toExclusive: end.toISOString(), fromDate: from, toDate: to };
+  }
+
+  const d = Math.min(Math.max(Number(days) || 30, 1), 366);
+  const end = new Date();
+  const start = new Date();
+  start.setUTCDate(start.getUTCDate() - d);
+  return {
+    from: start.toISOString(),
+    toExclusive: end.toISOString(),
+    fromDate: start.toISOString().slice(0, 10),
+    toDate: end.toISOString().slice(0, 10),
+    periodDays: d,
+  };
+}
+
+function sessionRangeWhere() {
+  return "started_at >= ? AND started_at < ?";
+}
+
+function messageRangeWhere() {
+  return "created_at >= ? AND created_at < ?";
+}
+
+async function getSummary(period) {
+  const range = typeof period === "number" ? resolvePeriod({ days: period }) : resolvePeriod(period);
+  const { from, toExclusive, fromDate, toDate, periodDays } = range;
 
   const totals = await get(
     `SELECT
@@ -109,8 +149,8 @@ async function getSummary(days = 30) {
       SUM(CASE WHEN satisfaction = 1 THEN 1 ELSE 0 END) AS thumbs_up,
       SUM(CASE WHEN satisfaction = -1 THEN 1 ELSE 0 END) AS thumbs_down,
       SUM(message_count) AS total_messages
-    FROM sessions WHERE started_at >= ?`,
-    [since]
+    FROM sessions WHERE ${sessionRangeWhere()}`,
+    [from, toExclusive]
   );
 
   const total = Number(totals?.total_sessions || 0);
@@ -119,7 +159,9 @@ async function getSummary(days = 30) {
   const fallback = Number(totals?.fallback || 0);
 
   return {
-    periodDays: days,
+    fromDate,
+    toDate,
+    periodDays: periodDays || null,
     totalSessions: total,
     resolvedByBot: resolved,
     escalated,
@@ -134,45 +176,58 @@ async function getSummary(days = 30) {
   };
 }
 
-async function getDailyStats(days = 30) {
-  const since = daysAgo(days);
+async function getDailyStats(period) {
+  const range = typeof period === "number" ? resolvePeriod({ days: period }) : resolvePeriod(period);
+  const { from, toExclusive } = range;
   const day = dayExpr();
   const rows = await all(
     `SELECT ${day} AS day, COUNT(*) AS sessions
-     FROM sessions WHERE started_at >= ?
+     FROM sessions WHERE ${sessionRangeWhere()}
      GROUP BY ${day} ORDER BY day`,
-    [since]
+    [from, toExclusive]
   );
   return rows.map((r) => ({ day: r.day, sessions: Number(r.sessions) }));
 }
 
-async function getIntentStats(days = 30) {
-  const since = daysAgo(days);
+async function getIntentStats(period) {
+  const range = typeof period === "number" ? resolvePeriod({ days: period }) : resolvePeriod(period);
+  const { from, toExclusive } = range;
   const rows = await all(
     `SELECT intent, COUNT(*) AS count FROM messages
-     WHERE role = 'bot' AND intent IS NOT NULL AND created_at >= ?
+     WHERE role = 'bot' AND intent IS NOT NULL AND ${messageRangeWhere()}
      GROUP BY intent ORDER BY count DESC LIMIT 12`,
-    [since]
+    [from, toExclusive]
   );
   return rows.map((r) => ({ intent: r.intent, count: Number(r.count) }));
 }
 
-async function getTopQuestions(days = 30, limit = 10) {
-  const since = daysAgo(days);
+async function getTopQuestions(period, limit = 10) {
+  const range = typeof period === "number" ? resolvePeriod({ days: period }) : resolvePeriod(period);
+  const { from, toExclusive } = range;
   const rows = await all(
     `SELECT text, COUNT(*) AS count FROM messages
-     WHERE role = 'user' AND created_at >= ?
+     WHERE role = 'user' AND ${messageRangeWhere()}
      GROUP BY text ORDER BY count DESC LIMIT ?`,
-    [since, limit]
+    [from, toExclusive, limit]
   );
   return rows.map((r) => ({ text: r.text, count: Number(r.count) }));
 }
 
-async function getRecentDialogs(limit = 50, offset = 0) {
+async function getRecentDialogs(limit = 50, offset = 0, period = null) {
+  let queryParams;
+  let where = "";
+  if (period) {
+    const range = resolvePeriod(period);
+    where = `WHERE ${sessionRangeWhere()}`;
+    queryParams = [range.from, range.toExclusive, limit, offset];
+  } else {
+    queryParams = [limit, offset];
+  }
+
   const sessions = await all(
     `SELECT id, started_at, last_activity, status, satisfaction, message_count
-     FROM sessions ORDER BY last_activity DESC LIMIT ? OFFSET ?`,
-    [limit, offset]
+     FROM sessions ${where} ORDER BY last_activity DESC LIMIT ? OFFSET ?`,
+    queryParams
   );
 
   const dialogs = [];
@@ -187,16 +242,17 @@ async function getRecentDialogs(limit = 50, offset = 0) {
   return dialogs;
 }
 
-async function exportCsv(days = 30) {
-  const since = daysAgo(days);
+async function exportCsv(period) {
+  const range = typeof period === "number" ? resolvePeriod({ days: period }) : resolvePeriod(period);
+  const { from, toExclusive } = range;
   const rows = await all(
     `SELECT s.id, s.started_at, s.status, s.satisfaction,
             m.role, m.text, m.intent, m.created_at
      FROM sessions s
      JOIN messages m ON m.session_id = s.id
-     WHERE s.started_at >= ?
+     WHERE s.started_at >= ? AND s.started_at < ?
      ORDER BY s.started_at DESC, m.created_at ASC`,
-    [since]
+    [from, toExclusive]
   );
 
   const header = "session_id,started_at,status,satisfaction,role,text,intent,created_at\n";
@@ -213,6 +269,7 @@ module.exports = {
   logChat,
   logEvent,
   logFeedback,
+  resolvePeriod,
   getSummary,
   getDailyStats,
   getIntentStats,

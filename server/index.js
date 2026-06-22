@@ -93,19 +93,32 @@ app.post("/api/feedback", async (req, res) => {
   }
 });
 
+function parsePeriodQuery(query) {
+  const { days, from, to } = query || {};
+  if (from || to) {
+    if (!from || !to) {
+      const err = new Error("Both from and to are required (YYYY-MM-DD)");
+      err.status = 400;
+      throw err;
+    }
+    return { from, to };
+  }
+  return { days: Number(days) || 30 };
+}
+
 app.get("/api/stats", async (req, res) => {
   try {
-    const days = Number(req.query.days) || 30;
+    const period = parsePeriodQuery(req.query);
     const [summary, daily, intents, topQuestions] = await Promise.all([
-      analytics.getSummary(days),
-      analytics.getDailyStats(days),
-      analytics.getIntentStats(days),
-      analytics.getTopQuestions(days),
+      analytics.getSummary(period),
+      analytics.getDailyStats(period),
+      analytics.getIntentStats(period),
+      analytics.getTopQuestions(period),
     ]);
-    res.json({ summary, daily, intents, topQuestions });
+    res.json({ period, summary, daily, intents, topQuestions });
   } catch (err) {
     console.error("[api/stats]", err);
-    res.status(500).json({ error: "Internal server error" });
+    res.status(err.status || 500).json({ error: err.message || "Internal server error" });
   }
 });
 
@@ -113,24 +126,29 @@ app.get("/api/dialogs", async (req, res) => {
   try {
     const limit = Math.min(Number(req.query.limit) || 50, 100);
     const offset = Number(req.query.offset) || 0;
-    const dialogs = await analytics.getRecentDialogs(limit, offset);
+    const period = req.query.from && req.query.to ? { from: req.query.from, to: req.query.to } : null;
+    const dialogs = await analytics.getRecentDialogs(limit, offset, period);
     res.json({ dialogs });
   } catch (err) {
     console.error("[api/dialogs]", err);
-    res.status(500).json({ error: "Internal server error" });
+    res.status(err.status || 500).json({ error: err.message || "Internal server error" });
   }
 });
 
 app.get("/api/export.csv", async (req, res) => {
   try {
-    const days = Number(req.query.days) || 30;
-    const csv = await analytics.exportCsv(days);
+    const period = parsePeriodQuery(req.query);
+    const range = analytics.resolvePeriod(period);
+    const csv = await analytics.exportCsv(period);
     res.setHeader("Content-Type", "text/csv; charset=utf-8");
-    res.setHeader("Content-Disposition", `attachment; filename="sat-analytics-${days}d.csv"`);
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="sat-analytics-${range.fromDate}_${range.toDate}.csv"`
+    );
     res.send("\uFEFF" + csv);
   } catch (err) {
     console.error("[api/export]", err);
-    res.status(500).json({ error: "Internal server error" });
+    res.status(err.status || 500).json({ error: err.message || "Internal server error" });
   }
 });
 

@@ -43,7 +43,7 @@
       background: #fff;
       border-bottom: 1px solid #e0e0e0;
     }
-    .toolbar select, .toolbar button, .toolbar a {
+    .toolbar select, .toolbar button, .toolbar a, .toolbar input[type="date"] {
       font-family: inherit;
       font-size: 13px;
       padding: 8px 14px;
@@ -54,6 +54,10 @@
       text-decoration: none;
       color: #212121;
     }
+    .toolbar input[type="date"] { cursor: text; min-width: 140px; }
+    .toolbar label { display: inline-flex; align-items: center; gap: 6px; }
+    .toolbar .range-sep { color: #888; font-size: 13px; }
+    .period-label { font-size: 12px; color: #666; }
     .toolbar button.primary, .toolbar a.primary {
       background: #ebaa00;
       border-color: #ebaa00;
@@ -138,15 +142,29 @@
   </header>
 
   <div class="toolbar">
-    <label>Період:
-      <select id="days">
+    <label>
+      <span class="period-label">Швидко:</span>
+      <select id="preset">
         <option value="7">7 днів</option>
         <option value="30" selected>30 днів</option>
         <option value="90">90 днів</option>
+        <option value="month">Цей місяць</option>
+        <option value="prev-month">Минулий місяць</option>
+        <option value="year">Цей рік</option>
+        <option value="custom">Свій період</option>
       </select>
     </label>
+    <label>
+      <span class="period-label">З</span>
+      <input type="date" id="fromDate" />
+    </label>
+    <span class="range-sep">—</span>
+    <label>
+      <span class="period-label">По</span>
+      <input type="date" id="toDate" />
+    </label>
     <button type="button" id="refresh">Оновити</button>
-    <a class="primary" id="export" href="/api/export.csv?days=30">Експорт CSV</a>
+    <a class="primary" id="export" href="#">Експорт CSV</a>
     <a href="/">← Тест чату</a>
   </div>
 
@@ -164,24 +182,96 @@
 
     let dailyChart = null;
     let intentChart = null;
+    let syncingPreset = false;
+
+    function todayStr() {
+      return new Date().toISOString().slice(0, 10);
+    }
+
+    function daysBeforeStr(n) {
+      const d = new Date();
+      d.setDate(d.getDate() - n);
+      return d.toISOString().slice(0, 10);
+    }
+
+    function monthRange(offsetMonths) {
+      const d = new Date();
+      d.setDate(1);
+      d.setMonth(d.getMonth() + offsetMonths);
+      const from = d.toISOString().slice(0, 10);
+      if (offsetMonths === 0) {
+        return { from, to: todayStr() };
+      }
+      const end = new Date(d.getFullYear(), d.getMonth() + 1, 0);
+      return { from, to: end.toISOString().slice(0, 10) };
+    }
+
+    function yearRange() {
+      const y = new Date().getFullYear();
+      return { from: `${y}-01-01`, to: todayStr() };
+    }
+
+    function applyPreset(preset) {
+      syncingPreset = true;
+      let range;
+      if (preset === "month") range = monthRange(0);
+      else if (preset === "prev-month") range = monthRange(-1);
+      else if (preset === "year") range = yearRange();
+      else if (preset === "custom") {
+        syncingPreset = false;
+        return;
+      } else {
+        const days = Number(preset) || 30;
+        range = { from: daysBeforeStr(days), to: todayStr() };
+      }
+      document.getElementById("fromDate").value = range.from;
+      document.getElementById("toDate").value = range.to;
+      syncingPreset = false;
+    }
+
+    function getRange() {
+      const from = document.getElementById("fromDate").value;
+      const to = document.getElementById("toDate").value;
+      if (!from || !to) throw new Error("Оберіть дати «з» і «по»");
+      if (from > to) throw new Error("Дата «з» не може бути пізніше «по»");
+      return { from, to };
+    }
+
+    function buildQuery() {
+      const { from, to } = getRange();
+      return "from=" + encodeURIComponent(from) + "&to=" + encodeURIComponent(to);
+    }
+
+    function formatPeriodLabel(summary) {
+      if (!summary?.fromDate || !summary?.toDate) return "";
+      const fmt = (s) => {
+        const [y, m, d] = s.split("-");
+        return `${d}.${m}.${y}`;
+      };
+      return `${fmt(summary.fromDate)} — ${fmt(summary.toDate)}`;
+    }
 
     async function load() {
-      const days = document.getElementById("days").value;
-      document.getElementById("export").href = "/api/export.csv?days=" + days;
+      const q = buildQuery();
+      document.getElementById("export").href = "/api/export.csv?" + q;
 
       const [statsRes, dialogsRes] = await Promise.all([
-        fetch("/api/stats?days=" + days),
-        fetch("/api/dialogs?limit=30"),
+        fetch("/api/stats?" + q),
+        fetch("/api/dialogs?limit=30&" + q),
       ]);
       const stats = await statsRes.json();
+      if (!statsRes.ok) throw new Error(stats.error || "Помилка завантаження");
       const dialogs = await dialogsRes.json();
+      if (!dialogsRes.ok) throw new Error(dialogs.error || "Помилка діалогів");
       render(stats, dialogs.dialogs || []);
     }
 
     function render(stats, dialogs) {
       const s = stats.summary;
+      const periodLabel = formatPeriodLabel(s);
       const app = document.getElementById("app");
       app.innerHTML = `
+        ${periodLabel ? `<p style="margin:0 0 16px;color:#666;font-size:13px">Період: <strong>${periodLabel}</strong></p>` : ""}
         <div class="kpi-grid">
           <div class="kpi"><div class="label">Діалогів</div><div class="value">${s.totalSessions}</div></div>
           <div class="kpi green"><div class="label">Закрито ботом</div><div class="value">${s.pctResolved}%</div><div class="sub">${s.resolvedByBot} діалогів</div></div>
@@ -273,10 +363,23 @@
     }
 
     document.getElementById("refresh").addEventListener("click", load);
-    document.getElementById("days").addEventListener("change", load);
-    load().catch((e) => {
-      document.getElementById("app").innerHTML = "<div class='loading'>Помилка: " + e.message + "</div>";
+    document.getElementById("preset").addEventListener("change", function () {
+      applyPreset(this.value);
+      if (this.value !== "custom") load().catch(showError);
     });
+    document.getElementById("fromDate").addEventListener("change", function () {
+      if (!syncingPreset) document.getElementById("preset").value = "custom";
+    });
+    document.getElementById("toDate").addEventListener("change", function () {
+      if (!syncingPreset) document.getElementById("preset").value = "custom";
+    });
+
+    function showError(e) {
+      document.getElementById("app").innerHTML = "<div class='loading'>Помилка: " + escapeHtml(e.message) + "</div>";
+    }
+
+    applyPreset("30");
+    load().catch(showError);
   </script>
 </body>
 </html>
