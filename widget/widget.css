@@ -201,8 +201,21 @@
   background: var(--sat-surface);
 }
 
-.sat-msg {
+.sat-msg-wrap {
+  display: flex;
+  flex-direction: column;
   max-width: 85%;
+}
+
+.sat-msg-wrap.user {
+  align-self: flex-end;
+}
+
+.sat-msg-wrap.bot {
+  align-self: flex-start;
+}
+
+.sat-msg {
   padding: 10px 14px;
   border-radius: 10px;
   word-break: break-word;
@@ -210,7 +223,6 @@
 }
 
 .sat-msg.bot {
-  align-self: flex-start;
   background: var(--sat-bg);
   color: var(--sat-text);
   border: 1px solid var(--sat-border);
@@ -219,7 +231,6 @@
 }
 
 .sat-msg.user {
-  align-self: flex-end;
   background: var(--sat-blue);
   color: #fff;
   border-bottom-right-radius: 3px;
@@ -237,6 +248,67 @@
 
 .sat-msg.user a {
   color: #fff;
+}
+
+.sat-msg-actions {
+  display: flex;
+  gap: 4px;
+  margin-top: 4px;
+  padding-left: 2px;
+}
+
+.sat-feedback-btn {
+  background: transparent;
+  border: 1px solid var(--sat-border);
+  border-radius: 16px;
+  padding: 2px 8px;
+  font-size: 14px;
+  cursor: pointer;
+  line-height: 1.4;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.sat-feedback-btn:hover:not(:disabled) {
+  background: var(--sat-gold-light);
+  border-color: var(--sat-gold);
+}
+
+.sat-feedback-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.sat-msg-actions--voted .sat-feedback-btn:not(:disabled) {
+  opacity: 1;
+}
+
+.sat-widget-actions {
+  display: flex;
+  justify-content: center;
+  padding: 6px 14px 0;
+  background: var(--sat-bg);
+}
+
+.sat-escalate-btn {
+  background: transparent;
+  border: 1px dashed var(--sat-blue);
+  color: var(--sat-blue);
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-size: 11px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.sat-escalate-btn:hover:not(:disabled) {
+  background: rgba(0, 114, 188, 0.08);
+}
+
+.sat-escalate-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+  border-style: solid;
 }
 
 /* Швидкі кнопки */

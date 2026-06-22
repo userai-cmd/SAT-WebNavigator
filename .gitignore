@@ -1,5 +1,8 @@
 node_modules/
+.pdf-tools/
 .env
 .DS_Store
 dist/
 *.log
+data/analytics.db
+data/analytics.db-*

@@ -27,13 +27,31 @@
     return el;
   }
 
+  function getSessionId() {
+    const KEY = "sat_widget_session";
+    try {
+      let id = localStorage.getItem(KEY);
+      if (!id) {
+        id = "sess_" + (crypto.randomUUID ? crypto.randomUUID() : Date.now() + "-" + Math.random().toString(36).slice(2));
+        localStorage.setItem(KEY, id);
+      }
+      return id;
+    } catch (_e) {
+      return "sess_" + Date.now();
+    }
+  }
+
+  function apiBase() {
+    return apiUrl.replace(/\/$/, "");
+  }
+
   function loadStyles() {
     if (document.getElementById("sat-widget-styles")) return;
     const link = document.createElement("link");
     link.id = "sat-widget-styles";
     link.rel = "stylesheet";
     const base = apiUrl.replace(/\/$/, "");
-    link.href = base + "/widget/widget.css?v=2";
+    link.href = base + "/widget/widget.css?v=3";
     document.head.appendChild(link);
   }
 
@@ -59,6 +77,9 @@
       "</div>" +
       '<div class="sat-widget-messages"></div>' +
       '<div class="sat-quick-replies"></div>' +
+      '<div class="sat-widget-actions">' +
+      '<button type="button" class="sat-escalate-btn">Зв\'язатися з оператором</button>' +
+      "</div>" +
       '<div class="sat-widget-input">' +
       '<input type="text" placeholder="Напишіть повідомлення…" autocomplete="off" />' +
       "<button type=\"button\">Надіслати</button></div>" +
@@ -80,13 +101,54 @@
     const input = panel.querySelector("input");
     const sendBtn = panel.querySelector(".sat-widget-input button");
     const closeBtn = panel.querySelector(".sat-widget-close");
+    const escalateBtn = panel.querySelector(".sat-escalate-btn");
 
+    const sessionId = getSessionId();
     let loading = false;
     let isOpen = false;
+    let escalated = false;
 
-    function addMessage(text, role) {
+    async function postJson(path, body) {
+      await fetch(apiBase() + path, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+    }
+
+    function addFeedbackActions(msgEl) {
+      const actions = createEl("div", "sat-msg-actions");
+      const up = createEl("button", "sat-feedback-btn", "👍");
+      const down = createEl("button", "sat-feedback-btn", "👎");
+      up.type = "button";
+      down.type = "button";
+      up.title = "Корисна відповідь";
+      down.title = "Некорисна відповідь";
+
+      function vote(rating) {
+        up.disabled = true;
+        down.disabled = true;
+        actions.classList.add("sat-msg-actions--voted");
+        postJson("/api/feedback", { sessionId, rating }).catch(function (e) {
+          console.warn("[SAT Widget] feedback", e);
+        });
+      }
+
+      up.addEventListener("click", function () { vote(1); });
+      down.addEventListener("click", function () { vote(-1); });
+      actions.appendChild(up);
+      actions.appendChild(down);
+      msgEl.appendChild(actions);
+    }
+
+    function addMessage(text, role, withFeedback) {
+      const wrap = createEl("div", "sat-msg-wrap " + role);
       const msg = createEl("div", "sat-msg " + role, mdToHtml(text));
-      messagesEl.appendChild(msg);
+      wrap.appendChild(msg);
+      if (role === "bot" && withFeedback !== false) {
+        addFeedbackActions(wrap);
+      }
+      messagesEl.appendChild(wrap);
       messagesEl.scrollTop = messagesEl.scrollHeight;
     }
 
@@ -125,10 +187,10 @@
       setLoading(true);
 
       try {
-        const res = await fetch(apiUrl.replace(/\/$/, "") + "/api/chat", {
+        const res = await fetch(apiBase() + "/api/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ message: text }),
+          body: JSON.stringify({ message: text, sessionId }),
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || "Помилка сервера");
@@ -143,13 +205,30 @@
       }
     }
 
+    async function escalate() {
+      if (escalated) return;
+      escalated = true;
+      escalateBtn.disabled = true;
+      escalateBtn.textContent = "Запит надіслано";
+      addMessage(
+        "Запит передано оператору. Зателефонуйте **0 800 30 99 09** або напишіть у [Telegram](https://t.me/sat_ua_bot).",
+        "bot",
+        false
+      );
+      try {
+        await postJson("/api/event", { sessionId, type: "escalate" });
+      } catch (e) {
+        console.warn("[SAT Widget] escalate", e);
+      }
+    }
+
     function open() {
       isOpen = true;
       root.classList.add("sat-widget--open");
       panel.classList.add("open");
       btn.setAttribute("aria-label", "Закрити чат SAT");
       if (messagesEl.children.length === 0) {
-        addMessage("Привіт! Я — помічник SAT 👋\n\nЧим можу допомогти?", "bot");
+        addMessage("Привіт! Я — помічник SAT 👋\n\nЧим можу допомогти?", "bot", false);
         setQuickReplies(["Послуги", "Тарифи", "Трекінг", "Відділення", "Кабінет"]);
       }
       input.focus();
@@ -170,6 +249,7 @@
     btn.addEventListener("click", toggle);
     closeBtn.addEventListener("click", close);
     overlay.addEventListener("click", close);
+    escalateBtn.addEventListener("click", escalate);
     sendBtn.addEventListener("click", send);
     input.addEventListener("keydown", function (e) {
       if (e.key === "Enter") send();

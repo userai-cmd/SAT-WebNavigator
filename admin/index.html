@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SAT WebNavigator — Аналітика</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Verdana, Arial, sans-serif;
+      background: #f0f2f5;
+      color: #212121;
+      font-size: 14px;
+    }
+    header {
+      background: linear-gradient(135deg, #0072bc, #005a94);
+      color: #fff;
+      padding: 20px 28px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    header h1 { margin: 0; font-size: 20px; }
+    header p { margin: 4px 0 0; opacity: 0.85; font-size: 12px; }
+    .badge {
+      background: #ebaa00;
+      color: #212121;
+      padding: 4px 10px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 700;
+    }
+    .toolbar {
+      padding: 16px 28px;
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      align-items: center;
+      background: #fff;
+      border-bottom: 1px solid #e0e0e0;
+    }
+    .toolbar select, .toolbar button, .toolbar a {
+      font-family: inherit;
+      font-size: 13px;
+      padding: 8px 14px;
+      border-radius: 6px;
+      border: 1px solid #ccc;
+      background: #fff;
+      cursor: pointer;
+      text-decoration: none;
+      color: #212121;
+    }
+    .toolbar button.primary, .toolbar a.primary {
+      background: #ebaa00;
+      border-color: #ebaa00;
+      color: #fff;
+      font-weight: 600;
+    }
+    main { padding: 24px 28px 48px; max-width: 1280px; margin: 0 auto; }
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+    .kpi {
+      background: #fff;
+      border: 1px solid #e0e0e0;
+      border-radius: 8px;
+      padding: 16px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.04);
+    }
+    .kpi .label { font-size: 11px; color: #666; text-transform: uppercase; letter-spacing: 0.04em; }
+    .kpi .value { font-size: 28px; font-weight: 700; margin-top: 6px; color: #0072bc; }
+    .kpi .sub { font-size: 12px; color: #888; margin-top: 4px; }
+    .kpi.gold .value { color: #c48800; }
+    .kpi.green .value { color: #2e7d32; }
+    .kpi.orange .value { color: #e65100; }
+    .charts {
+      display: grid;
+      grid-template-columns: 2fr 1fr;
+      gap: 20px;
+      margin-bottom: 24px;
+    }
+    @media (max-width: 900px) { .charts { grid-template-columns: 1fr; } }
+    .card {
+      background: #fff;
+      border: 1px solid #e0e0e0;
+      border-radius: 8px;
+      padding: 20px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.04);
+    }
+    .card h2 {
+      margin: 0 0 16px;
+      font-size: 15px;
+      border-left: 4px solid #ebaa00;
+      padding-left: 10px;
+    }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { padding: 10px 8px; text-align: left; border-bottom: 1px solid #eee; vertical-align: top; }
+    th { background: #f9f9f9; font-size: 11px; text-transform: uppercase; color: #666; }
+    .status {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 12px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+    .status.resolved_bot { background: #e8f5e9; color: #2e7d32; }
+    .status.escalated { background: #fff3e0; color: #e65100; }
+    .status.fallback { background: #ffebee; color: #c62828; }
+    .status.open { background: #e3f2fd; color: #1565c0; }
+    .dialog-preview { max-width: 320px; color: #555; font-size: 12px; }
+    .top-list { list-style: none; padding: 0; margin: 0; }
+    .top-list li {
+      padding: 8px 0;
+      border-bottom: 1px solid #f0f0f0;
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      font-size: 13px;
+    }
+    .top-list .count { color: #0072bc; font-weight: 700; white-space: nowrap; }
+    .loading { text-align: center; padding: 60px; color: #888; }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>SAT WebNavigator — Аналітика</h1>
+      <p>Статистика діалогів AI-помічника</p>
+    </div>
+    <span class="badge">ТЕСТОВИЙ РЕЖИМ · без пароля</span>
+  </header>
+
+  <div class="toolbar">
+    <label>Період:
+      <select id="days">
+        <option value="7">7 днів</option>
+        <option value="30" selected>30 днів</option>
+        <option value="90">90 днів</option>
+      </select>
+    </label>
+    <button type="button" id="refresh">Оновити</button>
+    <a class="primary" id="export" href="/api/export.csv?days=30">Експорт CSV</a>
+    <a href="/">← Тест чату</a>
+  </div>
+
+  <main id="app">
+    <div class="loading">Завантаження…</div>
+  </main>
+
+  <script>
+    const STATUS_LABELS = {
+      resolved_bot: "Закрито ботом",
+      escalated: "Оператор",
+      fallback: "Без відповіді",
+      open: "Відкрито",
+    };
+
+    let dailyChart = null;
+    let intentChart = null;
+
+    async function load() {
+      const days = document.getElementById("days").value;
+      document.getElementById("export").href = "/api/export.csv?days=" + days;
+
+      const [statsRes, dialogsRes] = await Promise.all([
+        fetch("/api/stats?days=" + days),
+        fetch("/api/dialogs?limit=30"),
+      ]);
+      const stats = await statsRes.json();
+      const dialogs = await dialogsRes.json();
+      render(stats, dialogs.dialogs || []);
+    }
+
+    function render(stats, dialogs) {
+      const s = stats.summary;
+      const app = document.getElementById("app");
+      app.innerHTML = `
+        <div class="kpi-grid">
+          <div class="kpi"><div class="label">Діалогів</div><div class="value">${s.totalSessions}</div></div>
+          <div class="kpi green"><div class="label">Закрито ботом</div><div class="value">${s.pctResolved}%</div><div class="sub">${s.resolvedByBot} діалогів</div></div>
+          <div class="kpi orange"><div class="label">Оператор</div><div class="value">${s.pctEscalated}%</div><div class="sub">${s.escalated} діалогів</div></div>
+          <div class="kpi"><div class="label">Без відповіді</div><div class="value">${s.pctFallback}%</div><div class="sub">${s.fallback} діалогів</div></div>
+          <div class="kpi gold"><div class="label">👍 / 👎</div><div class="value">${s.thumbsUp} / ${s.thumbsDown}</div></div>
+          <div class="kpi"><div class="label">Повідомлень</div><div class="value">${s.totalMessages}</div></div>
+        </div>
+        <div class="charts">
+          <div class="card"><h2>Діалоги по днях</h2><canvas id="dailyChart" height="120"></canvas></div>
+          <div class="card"><h2>Типи запитів (intent)</h2><canvas id="intentChart" height="200"></canvas></div>
+        </div>
+        <div class="charts">
+          <div class="card"><h2>Топ питань клієнтів</h2><ul class="top-list" id="topList"></ul></div>
+          <div class="card"><h2>Останні діалоги</h2><div style="overflow-x:auto"><table><thead><tr>
+            <th>Час</th><th>Статус</th><th>Перше питання</th><th>Msgs</th>
+          </tr></thead><tbody id="dialogRows"></tbody></table></div></div>
+        </div>
+      `;
+
+      const topList = document.getElementById("topList");
+      (stats.topQuestions || []).forEach((q) => {
+        const li = document.createElement("li");
+        li.innerHTML = `<span>${escapeHtml(q.text)}</span><span class="count">${q.count}</span>`;
+        topList.appendChild(li);
+      });
+      if (!stats.topQuestions?.length) {
+        topList.innerHTML = "<li>Ще немає даних — протестуйте чат</li>";
+      }
+
+      const tbody = document.getElementById("dialogRows");
+      dialogs.forEach((d) => {
+        const firstUser = (d.messages || []).find((m) => m.role === "user");
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td>${formatDate(d.started_at)}</td>
+          <td><span class="status ${d.status}">${STATUS_LABELS[d.status] || d.status}</span></td>
+          <td class="dialog-preview">${escapeHtml((firstUser?.text || "—").slice(0, 120))}</td>
+          <td>${d.message_count || 0}</td>`;
+        tbody.appendChild(tr);
+      });
+      if (!dialogs.length) {
+        tbody.innerHTML = "<tr><td colspan='4'>Немає діалогів</td></tr>";
+      }
+
+      drawCharts(stats);
+    }
+
+    function drawCharts(stats) {
+      if (dailyChart) dailyChart.destroy();
+      if (intentChart) intentChart.destroy();
+
+      dailyChart = new Chart(document.getElementById("dailyChart"), {
+        type: "line",
+        data: {
+          labels: (stats.daily || []).map((d) => d.day),
+          datasets: [{
+            label: "Діалоги",
+            data: (stats.daily || []).map((d) => d.sessions),
+            borderColor: "#0072bc",
+            backgroundColor: "rgba(0,114,188,0.1)",
+            fill: true,
+            tension: 0.3,
+          }],
+        },
+        options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } },
+      });
+
+      intentChart = new Chart(document.getElementById("intentChart"), {
+        type: "doughnut",
+        data: {
+          labels: (stats.intents || []).map((i) => i.intent),
+          datasets: [{
+            data: (stats.intents || []).map((i) => i.count),
+            backgroundColor: ["#0072bc","#ebaa00","#2e7d32","#e65100","#7b1fa2","#00838f","#5d4037","#455a64"],
+          }],
+        },
+        options: { plugins: { legend: { position: "bottom", labels: { boxWidth: 12, font: { size: 11 } } } } },
+      });
+    }
+
+    function formatDate(iso) {
+      if (!iso) return "—";
+      return new Date(iso).toLocaleString("uk-UA", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+    }
+
+    function escapeHtml(s) {
+      return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+    }
+
+    document.getElementById("refresh").addEventListener("click", load);
+    document.getElementById("days").addEventListener("change", load);
+    load().catch((e) => {
+      document.getElementById("app").innerHTML = "<div class='loading'>Помилка: " + e.message + "</div>";
+    });
+  </script>
+</body>
+</html>
