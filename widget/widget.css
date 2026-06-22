@@ -1,213 +1,351 @@
+/* SAT.ua brand — chat.css + theme palette */
 :root {
-  --sat-primary: #e85d04;
-  --sat-primary-dark: #c44d00;
+  --sat-gold: #ebaa00;
+  --sat-gold-hover: #d49a00;
+  --sat-gold-light: #fff8e6;
+  --sat-blue: #0072bc;
+  --sat-blue-dark: #005a94;
+  --sat-blue-light: #e8f4fc;
+  --sat-text: #212121;
+  --sat-text-muted: #666666;
   --sat-bg: #ffffff;
-  --sat-text: #1a1a1a;
-  --sat-muted: #666;
-  --sat-border: #e8e8e8;
-  --sat-bot-bg: #f5f5f5;
-  --sat-shadow: 0 8px 32px rgba(0, 0, 0, 0.18);
-  --sat-radius: 16px;
-  --sat-font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --sat-surface: #f5f5f5;
+  --sat-border: #e0e0e0;
+  --sat-shadow: 0 8px 6px -6px rgba(33, 33, 33, 0.2);
+  --sat-shadow-hover: 0 0 6px rgba(0, 0, 0, 0.16), 0 6px 12px rgba(0, 0, 0, 0.32);
+  --sat-radius: 12px;
+  --sat-font: Verdana, Arial, sans-serif;
 }
 
 #sat-widget-root {
   position: fixed;
-  bottom: 24px;
-  right: 24px;
+  bottom: 20px;
+  right: 20px;
   z-index: 99999;
   font-family: var(--sat-font);
   font-size: 14px;
-  line-height: 1.5;
+  line-height: 1.45;
+  color: var(--sat-text);
 }
 
 #sat-widget-root * {
   box-sizing: border-box;
 }
 
+/* Overlay — як social-right на sat.ua */
+.sat-widget-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(33, 33, 33, 0.3);
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.25s, visibility 0.25s;
+  z-index: -1;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+
+#sat-widget-root.sat-widget--open .sat-widget-overlay {
+  opacity: 1;
+  visibility: visible;
+}
+
+/* FAB — 65×65, золотий */
 .sat-widget-btn {
-  width: 60px;
-  height: 60px;
+  width: 65px;
+  height: 65px;
   border-radius: 50%;
   border: none;
-  background: var(--sat-primary);
+  background: var(--sat-gold);
   color: #fff;
   cursor: pointer;
   box-shadow: var(--sat-shadow);
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: transform 0.2s, background 0.2s;
+  transition: background-color 0.3s, box-shadow 0.3s, transform 0.2s;
+  position: relative;
+  z-index: 2;
 }
 
 .sat-widget-btn:hover {
-  background: var(--sat-primary-dark);
-  transform: scale(1.05);
+  background: var(--sat-gold-hover);
+  box-shadow: var(--sat-shadow-hover);
 }
 
-.sat-widget-btn svg {
-  width: 28px;
-  height: 28px;
-  fill: currentColor;
+.sat-widget-btn__icon {
+  position: absolute;
+  width: 32px;
+  height: 32px;
+  transition: opacity 0.3s, transform 0.3s;
+  pointer-events: none;
 }
 
+.sat-widget-btn__icon--chat {
+  opacity: 1;
+  transform: rotate(0);
+}
+
+.sat-widget-btn__icon--close {
+  opacity: 0;
+  transform: rotate(-90deg);
+  font-size: 28px;
+  line-height: 32px;
+  font-weight: 300;
+}
+
+#sat-widget-root.sat-widget--open .sat-widget-btn__icon--chat {
+  opacity: 0;
+  transform: rotate(90deg);
+}
+
+#sat-widget-root.sat-widget--open .sat-widget-btn__icon--close {
+  opacity: 1;
+  transform: rotate(0);
+}
+
+/* Панель чату */
 .sat-widget-panel {
   display: none;
   flex-direction: column;
   width: 380px;
   max-width: calc(100vw - 32px);
-  height: 520px;
-  max-height: calc(100vh - 100px);
+  height: 540px;
+  max-height: calc(100vh - 110px);
   background: var(--sat-bg);
   border-radius: var(--sat-radius);
-  box-shadow: var(--sat-shadow);
+  box-shadow: var(--sat-shadow-hover);
   overflow: hidden;
-  margin-bottom: 12px;
+  margin-bottom: 14px;
+  border: 1px solid var(--sat-border);
 }
 
 .sat-widget-panel.open {
   display: flex;
 }
 
+/* Шапка — синій акцент SAT (online-чат) */
 .sat-widget-header {
-  background: var(--sat-primary);
+  background: var(--sat-blue);
   color: #fff;
-  padding: 16px 18px;
+  padding: 14px 16px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.sat-widget-header__logo {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--sat-gold);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: -0.5px;
+  flex-shrink: 0;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
+}
+
+.sat-widget-header__text {
+  flex: 1;
+  min-width: 0;
 }
 
 .sat-widget-header h3 {
   margin: 0;
-  font-size: 16px;
-  font-weight: 600;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
 }
 
 .sat-widget-header p {
   margin: 2px 0 0;
-  font-size: 12px;
-  opacity: 0.9;
+  font-size: 11px;
+  opacity: 0.88;
 }
 
 .sat-widget-close {
-  background: none;
+  background: rgba(255, 255, 255, 0.15);
   border: none;
   color: #fff;
-  font-size: 22px;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  font-size: 20px;
   cursor: pointer;
-  padding: 0 4px;
   line-height: 1;
-  opacity: 0.85;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s;
+  flex-shrink: 0;
 }
 
 .sat-widget-close:hover {
-  opacity: 1;
+  background: rgba(255, 255, 255, 0.28);
 }
 
+/* Повідомлення */
 .sat-widget-messages {
   flex: 1;
   overflow-y: auto;
   padding: 16px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
+  background: var(--sat-surface);
 }
 
 .sat-msg {
-  max-width: 88%;
+  max-width: 85%;
   padding: 10px 14px;
-  border-radius: 14px;
+  border-radius: 10px;
   word-break: break-word;
+  font-size: 13px;
 }
 
 .sat-msg.bot {
   align-self: flex-start;
-  background: var(--sat-bot-bg);
+  background: var(--sat-bg);
   color: var(--sat-text);
-  border-bottom-left-radius: 4px;
+  border: 1px solid var(--sat-border);
+  border-bottom-left-radius: 3px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
 }
 
 .sat-msg.user {
   align-self: flex-end;
-  background: var(--sat-primary);
+  background: var(--sat-blue);
   color: #fff;
-  border-bottom-right-radius: 4px;
+  border-bottom-right-radius: 3px;
 }
 
 .sat-msg a {
   color: inherit;
-  text-decoration: underline;
+  font-weight: 600;
 }
 
 .sat-msg.bot a {
-  color: var(--sat-primary);
+  color: var(--sat-blue);
+  text-decoration: underline;
 }
 
+.sat-msg.user a {
+  color: #fff;
+}
+
+/* Швидкі кнопки */
 .sat-quick-replies {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  padding: 0 16px 8px;
+  padding: 8px 14px 4px;
+  background: var(--sat-bg);
+  border-top: 1px solid var(--sat-border);
 }
 
 .sat-quick-btn {
-  background: #fff;
-  border: 1px solid var(--sat-primary);
-  color: var(--sat-primary);
+  background: var(--sat-bg);
+  border: 1px solid var(--sat-gold);
+  color: var(--sat-text);
   border-radius: 20px;
   padding: 6px 12px;
   font-size: 12px;
+  font-family: inherit;
   cursor: pointer;
-  transition: background 0.15s;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
 }
 
 .sat-quick-btn:hover {
-  background: #fff5f0;
+  background: var(--sat-gold-light);
+  border-color: var(--sat-gold-hover);
+  color: var(--sat-text);
 }
 
+/* Поле вводу */
 .sat-widget-input {
   display: flex;
   gap: 8px;
-  padding: 12px 16px;
+  padding: 12px 14px;
+  background: var(--sat-bg);
   border-top: 1px solid var(--sat-border);
+  flex-shrink: 0;
 }
 
 .sat-widget-input input {
   flex: 1;
   border: 1px solid var(--sat-border);
-  border-radius: 24px;
-  padding: 10px 16px;
-  font-size: 14px;
+  border-radius: 6px;
+  padding: 10px 14px;
+  font-size: 13px;
   outline: none;
   font-family: inherit;
+  color: var(--sat-text);
+  background: var(--sat-bg);
+  transition: border-color 0.2s;
+}
+
+.sat-widget-input input::placeholder {
+  color: #999;
 }
 
 .sat-widget-input input:focus {
-  border-color: var(--sat-primary);
+  border-color: var(--sat-blue);
 }
 
 .sat-widget-input button {
-  background: var(--sat-primary);
+  background: var(--sat-gold);
   color: #fff;
   border: none;
-  border-radius: 24px;
-  padding: 10px 18px;
-  font-size: 14px;
+  border-radius: 6px;
+  padding: 10px 16px;
+  font-size: 13px;
+  font-weight: 600;
   cursor: pointer;
   font-family: inherit;
+  white-space: nowrap;
+  transition: background 0.2s, box-shadow 0.2s;
+}
+
+.sat-widget-input button:hover:not(:disabled) {
+  background: var(--sat-gold-hover);
+  box-shadow: var(--sat-shadow);
 }
 
 .sat-widget-input button:disabled {
-  opacity: 0.6;
+  opacity: 0.55;
   cursor: not-allowed;
 }
 
 .sat-typing {
   align-self: flex-start;
-  color: var(--sat-muted);
-  font-size: 13px;
+  color: var(--sat-text-muted);
+  font-size: 12px;
   padding: 4px 8px;
+  font-style: italic;
+}
+
+.sat-widget-footer {
+  text-align: center;
+  padding: 6px;
+  font-size: 10px;
+  color: #999;
+  background: var(--sat-bg);
+  border-top: 1px solid var(--sat-border);
+}
+
+.sat-widget-footer a {
+  color: var(--sat-blue);
+  text-decoration: none;
+}
+
+.sat-widget-footer a:hover {
+  text-decoration: underline;
 }
 
 @media (max-width: 480px) {
@@ -218,6 +356,11 @@
 
   .sat-widget-panel {
     width: calc(100vw - 32px);
-    height: calc(100vh - 90px);
+    height: calc(100vh - 100px);
+  }
+
+  .sat-widget-input button {
+    padding: 10px 12px;
+    font-size: 12px;
   }
 }

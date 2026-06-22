@@ -7,6 +7,11 @@
     window.SAT_WIDGET_API ||
     "http://localhost:3000";
 
+  const CHAT_ICON =
+    '<svg class="sat-widget-btn__icon sat-widget-btn__icon--chat" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">' +
+    '<path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H6l-2 2V4h16v12z"/>' +
+    "</svg>";
+
   function mdToHtml(text) {
     if (!text) return "";
     return text
@@ -28,7 +33,7 @@
     link.id = "sat-widget-styles";
     link.rel = "stylesheet";
     const base = apiUrl.replace(/\/$/, "");
-    link.href = base + "/widget/widget.css";
+    link.href = base + "/widget/widget.css?v=2";
     document.head.appendChild(link);
   }
 
@@ -38,22 +43,34 @@
     const root = createEl("div");
     root.id = "sat-widget-root";
 
+    const overlay = createEl("button", "sat-widget-overlay");
+    overlay.setAttribute("aria-label", "Закрити чат");
+    overlay.type = "button";
+
     const panel = createEl("div", "sat-widget-panel");
     panel.innerHTML =
       '<div class="sat-widget-header">' +
-      '<div><h3>Помічник SAT</h3><p>Онлайн-консультант</p></div>' +
-      '<button class="sat-widget-close" aria-label="Закрити">×</button></div>' +
+      '<div class="sat-widget-header__logo">SAT</div>' +
+      '<div class="sat-widget-header__text">' +
+      "<h3>Помічник SAT</h3>" +
+      "<p>Онлайн-консультант · sat.ua</p>" +
+      "</div>" +
+      '<button class="sat-widget-close" type="button" aria-label="Закрити">×</button>' +
+      "</div>" +
       '<div class="sat-widget-messages"></div>' +
       '<div class="sat-quick-replies"></div>' +
       '<div class="sat-widget-input">' +
       '<input type="text" placeholder="Напишіть повідомлення…" autocomplete="off" />' +
-      "<button>Надіслати</button></div>";
+      "<button type=\"button\">Надіслати</button></div>" +
+      '<div class="sat-widget-footer">Транспортна компанія <a href="https://sat.ua" target="_blank" rel="noopener">SAT</a></div>';
 
     const btn = createEl("button", "sat-widget-btn");
+    btn.type = "button";
     btn.setAttribute("aria-label", "Відкрити чат SAT");
     btn.innerHTML =
-      '<svg viewBox="0 0 24 24"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/></svg>';
+      CHAT_ICON + '<span class="sat-widget-btn__icon sat-widget-btn__icon--close" aria-hidden="true">×</span>';
 
+    root.appendChild(overlay);
     root.appendChild(panel);
     root.appendChild(btn);
     document.body.appendChild(root);
@@ -65,6 +82,7 @@
     const closeBtn = panel.querySelector(".sat-widget-close");
 
     let loading = false;
+    let isOpen = false;
 
     function addMessage(text, role) {
       const msg = createEl("div", "sat-msg " + role, mdToHtml(text));
@@ -91,7 +109,7 @@
       sendBtn.disabled = on;
       const existing = panel.querySelector(".sat-typing");
       if (on && !existing) {
-        messagesEl.appendChild(createEl("div", "sat-typing", "Думаю…"));
+        messagesEl.appendChild(createEl("div", "sat-typing", "Помічник думає…"));
         messagesEl.scrollTop = messagesEl.scrollHeight;
       } else if (!on && existing) {
         existing.remove();
@@ -126,25 +144,32 @@
     }
 
     function open() {
+      isOpen = true;
+      root.classList.add("sat-widget--open");
       panel.classList.add("open");
-      btn.style.display = "none";
+      btn.setAttribute("aria-label", "Закрити чат SAT");
       if (messagesEl.children.length === 0) {
-        addMessage(
-          "Привіт! Я — помічник SAT 👋\n\nЧим можу допомогти?",
-          "bot"
-        );
+        addMessage("Привіт! Я — помічник SAT 👋\n\nЧим можу допомогти?", "bot");
         setQuickReplies(["Послуги", "Тарифи", "Трекінг", "Відділення", "Кабінет"]);
       }
       input.focus();
     }
 
     function close() {
+      isOpen = false;
+      root.classList.remove("sat-widget--open");
       panel.classList.remove("open");
-      btn.style.display = "flex";
+      btn.setAttribute("aria-label", "Відкрити чат SAT");
     }
 
-    btn.addEventListener("click", open);
+    function toggle() {
+      if (isOpen) close();
+      else open();
+    }
+
+    btn.addEventListener("click", toggle);
     closeBtn.addEventListener("click", close);
+    overlay.addEventListener("click", close);
     sendBtn.addEventListener("click", send);
     input.addEventListener("keydown", function (e) {
       if (e.key === "Enter") send();
