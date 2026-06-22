@@ -5,6 +5,7 @@
   "main": "server/index.js",
   "scripts": {
     "import": "python3 scripts/import-excel.py",
+    "build:embeddings": "node scripts/build-embeddings.js",
     "build": "node -e \"require('./server/chat').loadKnowledgeBase(); console.log('OK')\"",
     "start": "node server/index.js",
     "dev": "node --watch server/index.js"
@@ -14,6 +15,7 @@
   },
   "dependencies": {
     "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
     "express": "^4.21.2"
   }
 }

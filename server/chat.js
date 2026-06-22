@@ -1,26 +1,8 @@
-const fs = require("fs");
-const path = require("path");
-
-const KB_PATH = path.join(__dirname, "../data/knowledge-base.json");
-
-let cache = null;
-
-function loadKnowledgeBase() {
-  if (!cache) {
-    cache = JSON.parse(fs.readFileSync(KB_PATH, "utf8"));
-  }
-  return cache;
-}
+const { loadKnowledgeBase, getBotResponse, searchKnowledgeBase } = require("./kb");
+const { retrieve } = require("./rag");
+const { generateReply, isEnabled } = require("./llm");
 
 const TRACKING_NUMBER_RE = /\b\d{10,20}\b/;
-
-const QUICK_ACTIONS = [
-  { label: "Послуги SAT", keywords: ["послуг", "доставк", "вантаж", "посилк"] },
-  { label: "Тарифи", keywords: ["тариф", "ціна", "вартість", "коштує", "скільки"] },
-  { label: "Трекінг", keywords: ["відстеж", "трекінг", "де вантаж", "статус", "накладн"] },
-  { label: "Відділення", keywords: ["відділен", "адрес", "де забрати", "склад"] },
-  { label: "Особистий кабінет", keywords: ["кабінет", "реєстрац", "увійти", "логін"] },
-];
 
 function normalize(text) {
   return text
@@ -28,58 +10,6 @@ function normalize(text) {
     .replace(/[^\p{L}\p{N}\s]/gu, " ")
     .replace(/\s+/g, " ")
     .trim();
-}
-
-function tokenize(text) {
-  return normalize(text).split(" ").filter((w) => w.length > 2);
-}
-
-function scoreEntry(queryTokens, entry) {
-  const keywords = entry["Ключові слова"] || "";
-  const question = entry["Питання"] || entry["Послуга"] || entry["Тема"] || entry["Ситуація"] || entry["Категорія"] || "";
-  const haystack = normalize(
-    [keywords, question, entry["Опис"] || "", entry["Параметри"] || "", entry["Правило / Умова"] || ""].join(" ")
-  );
-  let score = 0;
-  for (const token of queryTokens) {
-    if (haystack.includes(token)) score += 2;
-  }
-  const q = normalize(queryTokens.join(" "));
-  if (keywords && q) {
-    for (const kw of keywords.split(",")) {
-      const k = normalize(kw);
-      if (k && q.includes(k)) score += 5;
-    }
-  }
-  return score;
-}
-
-function getBotResponse(entry) {
-  return (
-    entry["Відповідь бота"] ||
-    entry["Шаблон фрази (UA)"] ||
-    entry["Значення"] ||
-    entry["Опис"] ||
-    null
-  );
-}
-
-function searchKnowledgeBase(query, limit = 3) {
-  const kb = loadKnowledgeBase();
-  const tokens = tokenize(query);
-  const scored = [];
-
-  for (const sheet of kb.sheets) {
-    for (const entry of sheet.entries) {
-      const score = scoreEntry(tokens, entry);
-      if (score > 0) {
-        scored.push({ score, entry, sheet: sheet.id });
-      }
-    }
-  }
-
-  scored.sort((a, b) => b.score - a.score);
-  return scored.slice(0, limit);
 }
 
 function detectTrackingNumber(query) {
@@ -118,7 +48,7 @@ function handleTracking(query) {
         `Введіть номер накладної у поле «Відстежити».`,
       intent: "tracking",
       trackingNumber: number,
-      links: [{ label: "Відстежити на sat.ua", url: `https://sat.ua/tracking` }],
+      links: [{ label: "Відстежити на sat.ua", url: "https://sat.ua/tracking" }],
     };
   }
   if (isTrackingIntent(query)) {
@@ -185,7 +115,51 @@ function handleGreeting() {
   };
 }
 
-function chat(message) {
+function fallbackReply() {
+  return {
+    text:
+      "На жаль, не знайшов точної відповіді у базі знань.\n\n" +
+      "Спробуйте переформулювати питання або:\n" +
+      "📞 Зв'яжіться з SAT: [info@sat.ua](mailto:info@sat.ua)\n" +
+      "🌐 [sat.ua](https://sat.ua)",
+    intent: "fallback",
+    quickReplies: ["Послуги", "Тарифи", "Трекінг", "Контакти"],
+  };
+}
+
+async function chatWithRag(message) {
+  const contexts = await retrieve(message);
+
+  if (!contexts.length) {
+    return fallbackReply();
+  }
+
+  if (!isEnabled()) {
+    const best = contexts[0];
+    const match = searchKnowledgeBase(message, 1)[0];
+    const text = match ? getBotResponse(match.entry) : best.text.slice(0, 600);
+    return {
+      text,
+      intent: "knowledge",
+      mode: "keyword",
+      sources: contexts.slice(0, 3).map((c) => ({ id: c.id, sheet: c.sheet })),
+    };
+  }
+
+  const text = await generateReply(message, contexts);
+  return {
+    text,
+    intent: "rag",
+    mode: "llm",
+    sources: contexts.slice(0, 3).map((c) => ({
+      id: c.id,
+      sheet: c.sheet,
+      score: c.score ? Number(c.score.toFixed(3)) : undefined,
+    })),
+  };
+}
+
+async function chat(message) {
   const query = (message || "").trim();
   if (!query) {
     return { text: "Напишіть ваше питання — з радістю допоможу!", intent: "empty" };
@@ -202,27 +176,21 @@ function chat(message) {
   const cabinet = handleCabinet(query);
   if (cabinet) return cabinet;
 
-  const results = searchKnowledgeBase(query, 3);
-  if (results.length > 0 && results[0].score >= 2) {
-    const best = results[0];
-    const response = getBotResponse(best.entry);
-    return {
-      text: response,
-      intent: "knowledge",
-      source: { sheet: best.sheet, id: best.entry.ID || best.entry.Параметр },
-      confidence: best.score,
-    };
+  try {
+    return await chatWithRag(query);
+  } catch (err) {
+    console.error("[chat] RAG/LLM error:", err.message);
+    const results = searchKnowledgeBase(query, 1);
+    if (results[0]) {
+      return {
+        text: getBotResponse(results[0].entry),
+        intent: "knowledge",
+        mode: "keyword-fallback",
+        error: err.message,
+      };
+    }
+    return fallbackReply();
   }
-
-  return {
-    text:
-      "На жаль, не знайшов точної відповіді у базі знань.\n\n" +
-      "Спробуйте переформулювати питання або:\n" +
-      "📞 Зв'яжіться з SAT: [info@sat.ua](mailto:info@sat.ua)\n" +
-      "🌐 [sat.ua](https://sat.ua)",
-    intent: "fallback",
-    quickReplies: ["Послуги", "Тарифи", "Трекінг", "Контакти"],
-  };
 }
 
 module.exports = {

@@ -16,9 +16,28 @@ AI-чат віджет для [sat.ua](https://sat.ua) на базі `SAT_Bot_Kn
 
 ```bash
 npm install
-npm run import    # оновити базу з Excel
-npm start         # http://localhost:3000
+cp .env.example .env   # додайте OPENAI_API_KEY
+npm run import         # оновити базу з Excel
+npm run build:embeddings   # побудувати RAG-індекс (один раз)
+npm start              # http://localhost:3000
 ```
+
+## LLM + RAG
+
+Бот використовує **OpenAI**:
+- **gpt-4o-mini** — генерація відповідей
+- **text-embedding-3-small** — пошук по базі знань (RAG)
+
+Змінні середовища (Railway → Variables):
+
+```
+OPENAI_API_KEY=sk-...
+ALLOWED_ORIGINS=https://sat.ua,https://www.sat.ua
+```
+
+Без `OPENAI_API_KEY` працює лише пошук по ключових словах (старий режим).
+
+Перевірка: `GET /health` → `rag.enabled`, `llm.enabled`, `rag.chunkCount`
 
 Відкрийте http://localhost:3000 — тестова сторінка з віджетом.
 

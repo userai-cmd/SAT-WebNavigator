@@ -1,7 +1,11 @@
+require("dotenv").config();
+
 const express = require("express");
 const cors = require("cors");
 const path = require("path");
 const { chat, loadKnowledgeBase } = require("./chat");
+const { ensureRagReady, getRagStatus } = require("./rag");
+const { isEnabled } = require("./llm");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -24,7 +28,6 @@ app.use(
 );
 app.use(express.json());
 
-// Static: widget, test page
 app.use("/widget", express.static(path.join(__dirname, "../widget")));
 app.use(express.static(path.join(__dirname, "../public")));
 
@@ -38,19 +41,38 @@ app.get("/health", (_req, res) => {
       entries: kb.totalEntries,
       sheets: kb.sheetCount,
     },
+    rag: getRagStatus(),
+    llm: { enabled: isEnabled() },
   });
 });
 
-app.post("/api/chat", (req, res) => {
+app.post("/api/chat", async (req, res) => {
   const { message } = req.body || {};
   if (!message || typeof message !== "string") {
     return res.status(400).json({ error: "message is required" });
   }
-  const reply = chat(message);
-  res.json({ message, reply });
+  try {
+    const reply = await chat(message);
+    res.json({ message, reply });
+  } catch (err) {
+    console.error("[api/chat]", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
 });
 
-app.listen(PORT, () => {
+async function start() {
   loadKnowledgeBase();
-  console.log(`SAT WebNavigator → http://localhost:${PORT}`);
-});
+  if (isEnabled()) {
+    ensureRagReady()
+      .then(() => console.log("RAG ready:", getRagStatus().chunkCount, "chunks"))
+      .catch((err) => console.warn("RAG init warning:", err.message));
+  } else {
+    console.warn("OPENAI_API_KEY not set — LLM/RAG embeddings disabled, keyword mode only");
+  }
+
+  app.listen(PORT, () => {
+    console.log(`SAT WebNavigator → http://localhost:${PORT}`);
+  });
+}
+
+start();
